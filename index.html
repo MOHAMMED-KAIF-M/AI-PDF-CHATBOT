@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI PDF Chatbot</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <style>
+        body {
+            background: linear-gradient(135deg, #ececec, #ffffff);
+        }
+        
+        #chatBox {
+            height: 70vh;
+            overflow-y: auto;
+            padding: 1rem;
+            scroll-behavior: smooth;
+        }
+        
+        #chatBox::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        #chatBox::-webkit-scrollbar-thumb {
+            background: #c4c4c4;
+            border-radius: 4px;
+        }
+        
+        .day-separator {
+            text-align: center;
+            font-size: 0.75rem;
+            color: #777;
+            margin: 16px 0;
+            font-weight: 500;
+        }
+        /* Smooth pop animation */
+        
+        .pop-in {
+            animation: pop 0.25s ease-out;
+        }
+        
+        @keyframes pop {
+            from {
+                opacity: 0;
+                transform: scale(0.95);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+    </style>
+</head>
+
+<body class="flex justify-center items-center p-6 bg-gray-200">
+
+    <div class="w-full max-w-3xl bg-white/80 backdrop-blur-xl border border-gray-200 shadow-2xl rounded-3xl flex flex-col h-[90vh]">
+
+        <!-- Header -->
+        <div class="bg-gray-900 text-white p-5 text-2xl font-bold rounded-t-3xl shadow-md flex items-center gap-3">
+            <div class="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center">
+                🤖
+            </div>
+            AI PDF Chatbot
+        </div>
+
+        <!-- Chat Box -->
+        <div id="chatBox" class="flex-1 bg-gray-50 p-5 overflow-y-auto"></div>
+
+        <!-- Input Section -->
+        <div class="flex items-center gap-3 p-4 bg-white border-t border-gray-300 rounded-b-3xl">
+
+            <!-- File Upload Button -->
+            <label class="cursor-pointer flex items-center justify-center w-12 h-12 rounded-full border border-gray-400 bg-gray-100 hover:bg-gray-200 transition text-2xl font-bold text-gray-700">
+      +
+      <input type="file" id="fileInput" class="hidden" accept=".pdf" />
+    </label>
+
+            <!-- Text Input -->
+            <input type="text" id="userInput" placeholder="Type your message…" class="flex-1 bg-gray-100 p-3 rounded-full px-5 outline-none border border-gray-300 focus:ring-2 focus:ring-gray-700 text-black shadow-sm" />
+
+            <!-- Send Button -->
+            <button id="sendBtn" class="w-12 h-12 bg-gray-900 hover:bg-black transition rounded-full flex items-center justify-center text-white text-2xl shadow-md active:scale-95">
+      ↑
+    </button>
+
+        </div>
+    </div>
+
+    <script>
+        let lastMessageDay = "";
+
+        document.getElementById("sendBtn").onclick = sendMessage;
+        document.getElementById("userInput").addEventListener("keypress", function(e) {
+            if (e.key === "Enter") sendMessage();
+        });
+
+        function getDayLabel(date) {
+            const now = new Date();
+            const msgDate = new Date(date);
+
+            const isToday = now.toDateString() === msgDate.toDateString();
+            const yesterday = new Date();
+            yesterday.setDate(now.getDate() - 1);
+
+            if (isToday) return "Today";
+            if (yesterday.toDateString() === msgDate.toDateString()) return "Yesterday";
+            return msgDate.toLocaleDateString();
+        }
+
+        function formatTime(date) {
+            return new Date(date).toLocaleTimeString([], {
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+
+        function sendMessage() {
+            const input = document.getElementById("userInput");
+            const msg = input.value.trim();
+            if (!msg) return;
+
+            addMessage("user", msg);
+            input.value = "";
+
+            fetch("/ask?q=" + encodeURIComponent(msg))
+                .then(r => r.json())
+                .then(d => addMessage("bot", d.answer));
+        }
+
+        function addMessage(sender, text) {
+            const box = document.getElementById("chatBox");
+            const now = new Date();
+            const dayLabel = getDayLabel(now);
+            const time = formatTime(now);
+
+            if (lastMessageDay !== dayLabel) {
+                const separator = document.createElement("div");
+                separator.className = "day-separator pop-in";
+                separator.textContent = dayLabel;
+                box.appendChild(separator);
+                lastMessageDay = dayLabel;
+            }
+
+            const bubbleWrapper = document.createElement("div");
+            bubbleWrapper.className = `flex ${sender === "user" ? "justify-end" : "justify-start"} mb-3 pop-in`;
+
+            const bubble = document.createElement("div");
+            bubble.className = `
+      inline-block px-5 py-3 rounded-2xl max-w-xl shadow 
+      border transition-all duration-200
+      ${sender === "user"
+          ? "bg-gray-900 text-white border-gray-800"
+          : "bg-white text-black border-gray-300"
+      }
+    `;
+
+            bubble.innerHTML = `
+      ${text}
+      <div class='text-xs text-gray-500 mt-1 text-right'>${time}</div>
+    `;
+
+            bubbleWrapper.appendChild(bubble);
+            box.appendChild(bubbleWrapper);
+
+            box.scrollTop = box.scrollHeight;
+        }
+
+        document.getElementById("fileInput").addEventListener("change", async function() {
+            const file = this.files[0];
+            if (!file) return;
+
+            addMessage("user", "PDF selected: " + file.name);
+            addMessage("bot", "Uploading your document… please wait.");
+
+            const formData = new FormData();
+            formData.append("file", file);
+
+            await fetch("/upload", {
+                    method: "POST",
+                    body: formData
+                })
+                .then(r => r.json())
+                .then(d => addMessage("bot", "Your document has been successfully uploaded and is now being processed."));
+        });
+    </script>
+
+</body>
+
+</html>
